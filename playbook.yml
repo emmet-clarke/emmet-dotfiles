@@ -77,9 +77,9 @@
         state: absent
       when: stow_targets.nvim is defined
 
-    - name: Remove conflicting yazi keymap
+    - name: Remove conflicting yazi directory
       file:
-        path: "{{ ansible_env.HOME }}/.config/yazi/keymap.toml"
+        path: "{{ ansible_env.HOME }}/.config/yazi"
         state: absent
 
     - name: Stow dotfiles

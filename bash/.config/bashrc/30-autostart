@@ -8,3 +8,8 @@
 if [[ $(tty) == *"pts"* ]]; then
     fastfetch
 fi
+
+# -----------------------------------------------------
+# ble.sh - Attach command line editor
+# -----------------------------------------------------
+[[ ${BLE_VERSION-} ]] && ble-attach

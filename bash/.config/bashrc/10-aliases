@@ -71,9 +71,11 @@ alias res1='xrandr --output DisplayPort-0 --mode 2560x1440 --rate 120'
 alias res2='xrandr --output DisplayPort-0 --mode 1920x1080 --rate 120'
 alias setkb='setxkbmap de;echo "Keyboard set back to de."'
 
-# Custom
+# -----------------------------------------------------
+# Custom 
+# -----------------------------------------------------
 alias ncfg='cd /home/emmet/.config/nvim && y'
-alias erp='cd /home/emmet/projects/erp && source .venv/bin/activate && y'
+alias erp='cd /home/emmet/projects/erp && y'
 alias bizops='cd /home/emmet/projects/bizops && y'
 alias dq='cd /home/emmet/projects/bizops/airflow/queries && y'
 alias dags='cd /home/emmet/projects/bizops/airflow/dags && y'
@@ -82,3 +84,4 @@ alias cf='cd /home/emmet/projects/bizops/cloud_functions && y'
 alias tfd='cd /home/emmet/projects/bizops/terraform/data-team && y'
 alias lg='lazygit'
 alias cfg='cd /home/emmet/.config && y'
+

@@ -27,7 +27,8 @@ pacman_packages:
 # AUR packages (requires yay)
 # -----------------------------------------------------
 aur_packages:
-  - google-cloud-cli        # includes gcloud and bq
+  - google-cloud-cli
+  - google-cloud-cli-bq
   - oh-my-posh-bin
 
 # -----------------------------------------------------
