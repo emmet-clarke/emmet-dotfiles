@@ -1,0 +1,38 @@
+# -----------------------------------------------------
+# Pacman packages (official Arch repos)
+# -----------------------------------------------------
+pacman_packages:
+  # Core tools
+  - stow
+  - git
+  - neovim
+  - ripgrep
+  - fzf
+  - eza
+  - yazi
+  - lazygit
+
+  # Python
+  - python
+  - uv
+
+  # Shell
+  - bash-completion
+
+  # Build tools
+  - base-devel
+  - ccache
+
+# -----------------------------------------------------
+# AUR packages (requires yay)
+# -----------------------------------------------------
+aur_packages:
+  - google-cloud-cli        # includes gcloud and bq
+  - oh-my-posh-bin
+
+# -----------------------------------------------------
+# Python tools installed via uv
+# -----------------------------------------------------
+uv_tools:
+  - dbt-core
+  - dbt-bigquery

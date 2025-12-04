@@ -1,0 +1,14 @@
+[[mgr.prepend_keymap]]
+on  = ["f","f"]
+run = "plugin fg -- fzf"
+desc = "Find file by filename (fzf)"
+
+[[mgr.prepend_keymap]]
+on  = ["f","g"]
+run = "plugin fg"
+desc = "Search file content (fuzzy match via rg lines + fzf)"
+
+[[mgr.prepend_keymap]]
+on  = ["f","G"]
+run = "plugin fg -- rg"
+desc = "Content search (live ripgrep match)"

@@ -1,0 +1,115 @@
+---
+- name: Setup Arch Linux development environment
+  hosts: localhost
+  connection: local
+  gather_facts: true
+
+  vars_files:
+    - vars/packages.yml
+
+  vars:
+    dotfiles_repo: "git@github.com:emmet-clarke/emmet-dotfiles.git"
+    dotfiles_dir: "{{ ansible_env.HOME }}/emmet-dotfiles"
+
+    # Stow packages to deploy (kitty handled separately to preserve ML4W base config)
+    stow_packages:
+      - bash
+      - nvim
+      - yazi
+
+    # Maps stow package to a file that should exist after stowing
+    # Used by 'creates' to make the task idempotent
+    stow_targets:
+      bash: "{{ ansible_env.HOME }}/.config/bashrc/00-init"
+      nvim: "{{ ansible_env.HOME }}/.config/nvim/init.lua"
+      yazi: "{{ ansible_env.HOME }}/.config/yazi/keymap.toml"
+
+  tasks:
+    # ──────────────────────────────────────────────────────────────
+    # Package Installation
+    # ──────────────────────────────────────────────────────────────
+    - name: Install packages with pacman
+      become: true
+      community.general.pacman:
+        name: "{{ pacman_packages }}"
+        state: present
+      when: pacman_packages is defined and pacman_packages | length > 0
+
+    - name: Check if yay is installed
+      command: which yay
+      register: yay_check
+      changed_when: false
+      failed_when: false
+
+    - name: Install AUR packages with yay
+      command: yay -S --noconfirm {{ item }}
+      loop: "{{ aur_packages }}"
+      when:
+        - yay_check.rc == 0
+        - aur_packages is defined and aur_packages | length > 0
+
+    # ──────────────────────────────────────────────────────────────
+    # Dotfiles
+    # ──────────────────────────────────────────────────────────────
+    - name: Clone dotfiles repository
+      git:
+        repo: "{{ dotfiles_repo }}"
+        dest: "{{ dotfiles_dir }}"
+        version: main
+        update: yes
+
+    - name: Ensure .config directory exists
+      file:
+        path: "{{ ansible_env.HOME }}/.config"
+        state: directory
+        mode: '0755'
+
+    # Remove existing files/symlinks that would conflict with stow
+    - name: Remove conflicting ML4W bashrc symlink
+      file:
+        path: "{{ ansible_env.HOME }}/.config/bashrc"
+        state: absent
+      when: stow_targets.bash is defined
+
+    - name: Remove conflicting nvim directory
+      file:
+        path: "{{ ansible_env.HOME }}/.config/nvim"
+        state: absent
+      when: stow_targets.nvim is defined
+
+    - name: Remove conflicting yazi keymap
+      file:
+        path: "{{ ansible_env.HOME }}/.config/yazi/keymap.toml"
+        state: absent
+
+    - name: Stow dotfiles
+      shell: |
+        cd {{ dotfiles_dir }} && stow --restow {{ item }}
+      loop: "{{ stow_packages }}"
+      args:
+        creates: "{{ stow_targets[item] }}"
+
+    # ──────────────────────────────────────────────────────────────
+    # Kitty (symlink custom.conf only, preserve ML4W base config)
+    # ──────────────────────────────────────────────────────────────
+    - name: Ensure kitty config directory exists
+      file:
+        path: "{{ ansible_env.HOME }}/.config/kitty"
+        state: directory
+        mode: '0755'
+
+    - name: Symlink kitty custom.conf
+      file:
+        src: "{{ dotfiles_dir }}/kitty/.config/kitty/custom.conf"
+        dest: "{{ ansible_env.HOME }}/.config/kitty/custom.conf"
+        state: link
+
+    # ──────────────────────────────────────────────────────────────
+    # Python Tools (via uv)
+    # ──────────────────────────────────────────────────────────────
+    - name: Install Python tools with uv
+      command: uv tool install {{ item }}
+      loop: "{{ uv_tools }}"
+      register: uv_install
+      changed_when: "'Installed' in uv_install.stdout"
+      failed_when: false
