@@ -9,7 +9,8 @@
 
   vars:
     dotfiles_repo: "git@github.com:emmet-clarke/emmet-dotfiles.git"
-    dotfiles_dir: "{{ ansible_env.HOME }}/emmet-dotfiles"
+    local_user: "{{ lookup('env', 'SUDO_USER') | default(lookup('env', 'USER')) }}"
+    local_home: "/home/{{ local_user }}"
 
     # Stow packages to deploy (kitty handled separately to preserve ML4W base config)
     stow_packages:
@@ -20,72 +21,113 @@
     # Maps stow package to a file that should exist after stowing
     # Used by 'creates' to make the task idempotent
     stow_targets:
-      bash: "{{ ansible_env.HOME }}/.config/bashrc/00-init"
-      nvim: "{{ ansible_env.HOME }}/.config/nvim/init.lua"
-      yazi: "{{ ansible_env.HOME }}/.config/yazi/keymap.toml"
+      bash: "{{ local_home }}/.config/bashrc/00-init"
+      nvim: "{{ local_home }}/.config/nvim/init.lua"
+      yazi: "{{ local_home }}/.config/yazi/keymap.toml"
 
   tasks:
     # ──────────────────────────────────────────────────────────────
     # Package Installation
     # ──────────────────────────────────────────────────────────────
     - name: Install packages with pacman
-      become: true
       community.general.pacman:
         name: "{{ pacman_packages }}"
         state: present
       when: pacman_packages is defined and pacman_packages | length > 0
 
     - name: Check if yay is installed
-      command: which yay
+      ansible.builtin.shell: which yay
+      become: true
+      become_user: "{{ local_user }}"
       register: yay_check
       changed_when: false
       failed_when: false
 
-    - name: Install AUR packages with yay
-      command: yay -S --noconfirm {{ item }}
+    - name: Check which AUR packages need to be installed
+      ansible.builtin.shell: |
+        yay -Qi {{ item }} > /dev/null 2>&1 && echo "installed" || echo "missing"
       loop: "{{ aur_packages }}"
+      become: true
+      become_user: "{{ local_user }}"
+      register: aur_check
+      changed_when: false
       when:
         - yay_check.rc == 0
         - aur_packages is defined and aur_packages | length > 0
 
+    - name: Show AUR packages to install
+      ansible.builtin.debug:
+        msg: "AUR packages to install: {{ aur_packages | zip(aur_check.results | map(attribute='stdout')) | selectattr('1', 'eq', 'missing') | map('first') | list }}"
+      when: aur_check is defined and aur_check.results is defined
+
+    - name: Install AUR packages with yay
+      ansible.builtin.shell: |
+        yay -S --noconfirm --needed {{ aur_packages | join(' ') }}
+      become: true
+      become_user: "{{ local_user }}"
+      when:
+        - yay_check.rc == 0
+        - aur_packages is defined and aur_packages | length > 0
+        - aur_check.results | selectattr('stdout', 'eq', 'missing') | list | length > 0
+      register: yay_result
+      changed_when: yay_result.rc == 0
+      failed_when: false
+
+    - name: Notify if AUR installation failed
+      ansible.builtin.debug:
+        msg: |
+          AUR package installation may have failed. Run this manually:
+          yay -S --needed {{ aur_packages | join(' ') }}
+      when: yay_result is defined and yay_result.rc is defined and yay_result.rc != 0
+
     # ──────────────────────────────────────────────────────────────
     # Dotfiles
     # ──────────────────────────────────────────────────────────────
+    - name: Check if dotfiles repository exists
+      ansible.builtin.stat:
+        path: "{{ local_home }}/emmet-dotfiles/.git"
+      register: dotfiles_repo_stat
+
     - name: Clone dotfiles repository
       git:
         repo: "{{ dotfiles_repo }}"
-        dest: "{{ dotfiles_dir }}"
+        dest: "{{ local_home }}/emmet-dotfiles"
         version: main
-        update: yes
+      become: true
+      become_user: "{{ local_user }}"
+      when: not dotfiles_repo_stat.stat.exists
 
     - name: Ensure .config directory exists
       file:
-        path: "{{ ansible_env.HOME }}/.config"
+        path: "{{ local_home }}/.config"
         state: directory
         mode: '0755'
+        owner: "{{ local_user }}"
 
     # Remove existing files/symlinks that would conflict with stow
     - name: Remove conflicting ML4W bashrc symlink
       file:
-        path: "{{ ansible_env.HOME }}/.config/bashrc"
+        path: "{{ local_home }}/.config/bashrc"
         state: absent
       when: stow_targets.bash is defined
 
     - name: Remove conflicting nvim directory
       file:
-        path: "{{ ansible_env.HOME }}/.config/nvim"
+        path: "{{ local_home }}/.config/nvim"
         state: absent
       when: stow_targets.nvim is defined
 
     - name: Remove conflicting yazi directory
       file:
-        path: "{{ ansible_env.HOME }}/.config/yazi"
+        path: "{{ local_home }}/.config/yazi"
         state: absent
 
     - name: Stow dotfiles
-      shell: |
-        cd {{ dotfiles_dir }} && stow --restow {{ item }}
+      ansible.builtin.shell: |
+        cd {{ local_home }}/emmet-dotfiles && stow --restow {{ item }}
       loop: "{{ stow_packages }}"
+      become: true
+      become_user: "{{ local_user }}"
       args:
         creates: "{{ stow_targets[item] }}"
 
@@ -94,22 +136,26 @@
     # ──────────────────────────────────────────────────────────────
     - name: Ensure kitty config directory exists
       file:
-        path: "{{ ansible_env.HOME }}/.config/kitty"
+        path: "{{ local_home }}/.config/kitty"
         state: directory
         mode: '0755'
+        owner: "{{ local_user }}"
 
     - name: Symlink kitty custom.conf
       file:
-        src: "{{ dotfiles_dir }}/kitty/.config/kitty/custom.conf"
-        dest: "{{ ansible_env.HOME }}/.config/kitty/custom.conf"
+        src: "{{ local_home }}/emmet-dotfiles/kitty/.config/kitty/custom.conf"
+        dest: "{{ local_home }}/.config/kitty/custom.conf"
         state: link
+        owner: "{{ local_user }}"
 
     # ──────────────────────────────────────────────────────────────
     # Python Tools (via uv)
     # ──────────────────────────────────────────────────────────────
     - name: Install Python tools with uv
-      command: uv tool install {{ item }}
+      ansible.builtin.shell: uv tool install {{ item }}
       loop: "{{ uv_tools }}"
+      become: true
+      become_user: "{{ local_user }}"
       register: uv_install
       changed_when: "'Installed' in uv_install.stdout"
       failed_when: false
